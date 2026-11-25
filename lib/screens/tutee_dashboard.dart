@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'login_screen.dart';
 
 class TuteeDashboard extends StatefulWidget {
   final String userName;
@@ -14,15 +17,14 @@ class _TuteeDashboardState extends State<TuteeDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // List of tab views for the Tutee
-    final List<Widget> _pages = [
+    final pages = [
       _TuteeHomeTab(userName: widget.userName),
       const _TuteeMyClassesTab(),
-      const _TuteeProfileTab(),
+      _TuteeProfileTab(userName: widget.userName),
     ];
 
     return Scaffold(
-      body: _pages[_currentIndex],
+      body: pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         selectedItemColor: Colors.teal,
@@ -51,9 +53,6 @@ class _TuteeDashboardState extends State<TuteeDashboard> {
   }
 }
 
-// -----------------------------------------
-// TUTEE HOME / EXPLORE TAB
-// -----------------------------------------
 class _TuteeHomeTab extends StatelessWidget {
   final String userName;
 
@@ -94,8 +93,6 @@ class _TuteeHomeTab extends StatelessWidget {
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 24),
-
-            // Search Bar Widget
             TextField(
               decoration: InputDecoration(
                 hintText: 'Search for expert tutors or subjects...',
@@ -109,7 +106,6 @@ class _TuteeHomeTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-
             const Text(
               'Featured Options',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -182,9 +178,6 @@ class _TuteeHomeTab extends StatelessWidget {
   }
 }
 
-// -----------------------------------------
-// TUTEE CLASSES & PROFILE TABS (Placeholders)
-// -----------------------------------------
 class _TuteeMyClassesTab extends StatelessWidget {
   const _TuteeMyClassesTab();
 
@@ -206,8 +199,43 @@ class _TuteeMyClassesTab extends StatelessWidget {
   }
 }
 
-class _TuteeProfileTab extends StatelessWidget {
-  const _TuteeProfileTab();
+class _TuteeProfileTab extends StatefulWidget {
+  final String userName;
+
+  const _TuteeProfileTab({required this.userName});
+
+  @override
+  State<_TuteeProfileTab> createState() => _TuteeProfileTabState();
+}
+
+class _TuteeProfileTabState extends State<_TuteeProfileTab> {
+  bool _isLoggingOut = false;
+
+  Future<void> _logout() async {
+    setState(() {
+      _isLoggingOut = true;
+    });
+
+    try {
+      await Supabase.instance.client.auth.signOut();
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Logout failed: $error')));
+
+      setState(() {
+        _isLoggingOut = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -217,10 +245,29 @@ class _TuteeProfileTab extends StatelessWidget {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-      body: const Center(
-        child: Text(
-          'Manage your learning goals and profile settings here.',
-          style: TextStyle(fontSize: 16, color: Colors.grey),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.userName,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isLoggingOut ? null : _logout,
+                icon: const Icon(Icons.logout),
+                label: Text(_isLoggingOut ? 'Logging out...' : 'Logout'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

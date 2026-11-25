@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import 'tutor_dashboard.dart';
+import 'package:file_picker/file_picker.dart';
 
 class TutorRequirementsScreen extends StatefulWidget {
   final String userName;
@@ -17,6 +16,8 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
   final _bioController = TextEditingController();
   final _subjectsController = TextEditingController();
   final _rateController = TextEditingController();
+
+  PlatformFile? _selectedFile;
   bool _isLoading = false;
 
   @override
@@ -27,28 +28,70 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
     super.dispose();
   }
 
-  void _submitTutorRequirements() {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  Future<void> _pickDocument() async {
+  try {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    );
 
-      // Simulate network submission upload
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-        });
+    if (file == null) return;
 
-        // Redirect to Tutor Dashboard
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TutorDashboard(userName: widget.userName),
-          ),
-        );
-      });
+    final fileSize = file.lengthSync() ?? await file.length();
+
+    if (fileSize == null) {
+      throw Exception('Unable to determine file size.');
     }
+
+    if (fileSize > 10 * 1024 * 1024) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('File must not exceed 10 MB.'),
+        ),
+      );
+      return;
+    }
+
+    // Check that the selected file can be read.
+    await file.readAsBytes();
+
+    if (!mounted) return;
+
+    setState(() {
+      _selectedFile = file;
+    });
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('File selection failed: $e'),
+      ),
+    );
+  }
+}
+
+  void _submitTutorRequirements() {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select your verification document.'),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'File selection is working. Database submission is the next step.',
+        ),
+      ),
+    );
   }
 
   @override
@@ -66,7 +109,7 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 450),
               child: Form(
@@ -91,7 +134,7 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Please provide your teaching background, expertise, and certifications to start mentoring on SkillBridge.',
+                      'Provide your teaching background and supporting documents for verification.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -100,7 +143,6 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Professional Bio
                     TextFormField(
                       controller: _bioController,
                       maxLines: 3,
@@ -122,11 +164,10 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Subjects You Can Teach
                     TextFormField(
                       controller: _subjectsController,
                       decoration: InputDecoration(
-                        labelText: 'Subjects / Skills to Teach (e.g. Calculus, Python)',
+                        labelText: 'Subjects / Skills to Teach',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -135,19 +176,20 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
                       ),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
-                          return 'Please enter subjects you can teach';
+                          return 'Please enter your subjects or skills';
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
 
-                    // Expected Hourly Rate
                     TextFormField(
                       controller: _rateController,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: InputDecoration(
-                        labelText: 'Expected Hourly Rate (\$ / hr)',
+                        labelText: 'Expected Hourly Rate (₱ / hour)',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -155,15 +197,16 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
                         fillColor: Colors.white,
                       ),
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please specify your hourly rate';
+                        final rate = double.tryParse(value?.trim() ?? '');
+
+                        if (rate == null || rate < 0) {
+                          return 'Enter a valid hourly rate';
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: 20),
 
-                    // Certificate Upload Card
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -171,85 +214,91 @@ class _TutorRequirementsScreenState extends State<TutorRequirementsScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.upload_file_rounded,
-                            color: accentColor,
-                            size: 32,
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Upload Diploma / Valid ID / Resume',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'PDF, JPG, or PNG (Max 5MB)',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
+                          const Text(
+                            'Verification Document',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
                             ),
                           ),
-                          TextButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Document uploaded successfully!',
-                                  ),
-                                ),
-                              );
-                            },
-                            child: const Text(
-                              'Browse',
-                              style: TextStyle(color: accentColor),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Select a valid ID or supporting document. PDF, JPG, or PNG. Maximum 10 MB.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.upload_file_rounded,
+                                color: accentColor,
+                                size: 30,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _selectedFile?.name ??
+                                      'No file selected',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _pickDocument,
+                                child: const Text(
+                                  'Browse',
+                                  style: TextStyle(color: accentColor),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_selectedFile != null)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedFile = null;
+                                  });
+                                },
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Remove file'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 32),
 
-                    // Submit Button
                     SizedBox(
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _submitTutorRequirements,
+                        onPressed:
+                            _isLoading ? null : _submitTutorRequirements,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: accentColor,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          elevation: 2,
                         ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                'Submit Credentials & Continue',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                        child: const Text(
+                          'Continue',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                   ],

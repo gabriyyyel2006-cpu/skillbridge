@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'tutor_requirements_screen.dart'; // Import tutor requirements
-import 'tutee_requirements_screen.dart'; // Import tutee requirements
+import 'tutor_requirements_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   final String userName;
@@ -13,42 +13,119 @@ class RoleSelectionScreen extends StatefulWidget {
 }
 
 class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
-  String? _selectedRole; // 'tutor' or 'tutee'
+  final _nameController = TextEditingController();
 
-  void _confirmSelection() {
-    if (_selectedRole == null) return;
+  String? _selectedRole;
+  String? _selectedUserType;
 
-    // Navigate to the correct separate requirement screen
-    if (_selectedRole == 'tutor') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              TutorRequirementsScreen(userName: widget.userName),
-        ),
-      );
-    } else if (_selectedRole == 'tutee') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              TuteeRequirementsScreen(userName: widget.userName),
-        ),
-      );
+  bool _isLoading = false;
+  bool _profileCreated = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirmSelection() async {
+    if (_isLoading || _profileCreated) return;
+
+    if (_selectedRole == null) {
+      _showMessage('Please select an account role.');
+      return;
     }
+
+    if (_selectedRole == 'tutee' && _selectedUserType == null) {
+      _showMessage('Please select your Tutee classification.');
+      return;
+    }
+
+    final fullName = widget.userName.trim().isNotEmpty
+        ? widget.userName.trim()
+        : _nameController.text.trim();
+
+    if (fullName.isEmpty) {
+      _showMessage('Please enter your full name.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final supabase = Supabase.instance.client;
+
+      // Save the full name if the account has no name metadata.
+      if (widget.userName.trim().isEmpty) {
+        await supabase.auth.updateUser(
+          UserAttributes(data: {'full_name': fullName}),
+        );
+      }
+
+      // Create the user's profile through the secured database RPC.
+      await supabase.rpc(
+        'create_user_profile',
+        params: {
+          'p_role': _selectedRole,
+          'p_user_type': _selectedRole == 'tutee' ? _selectedUserType : null,
+        },
+      );
+
+      if (!mounted) return;
+
+if (_selectedRole == 'tutor') {
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (context) => TutorRequirementsScreen(
+        userName: fullName,
+      ),
+    ),
+  );
+  return;
+}
+
+setState(() {
+  _profileCreated = true;
+});
+
+_showMessage('Your SkillBridge profile has been created successfully.');
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      _showMessage(error.message, isError: true);
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('Unable to create your profile: $error', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasName = widget.userName.trim().isNotEmpty;
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24.0,
-              vertical: 24.0,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 500),
               child: Column(
@@ -60,6 +137,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                     color: Colors.indigo,
                   ),
                   const SizedBox(height: 16),
+
                   const Text(
                     'Welcome to SkillBridge!',
                     textAlign: TextAlign.center,
@@ -70,38 +148,114 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
+
                   Text(
-                    'Hello ${widget.userName.isNotEmpty ? widget.userName : "there"}! How do you plan to use SkillBridge today?',
+                    'Hello ${hasName ? widget.userName : "there"}! '
+                    'How do you plan to use SkillBridge today?',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
 
-                  // Option 1: Tutor Card
+                  if (!hasName) ...[
+                    TextField(
+                      controller: _nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Full Name',
+                        prefixIcon: Icon(Icons.person_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
                   _buildRoleCard(
                     roleKey: 'tutor',
                     title: 'Become a Tutor',
-                    description: 'Share your knowledge, mentor students, and earn by teaching skills you love.',
+                    description:
+                        'Share your knowledge, mentor students, '
+                        'and earn by teaching skills you love.',
                     icon: Icons.psychology_rounded,
                     accentColor: Colors.indigo,
                   ),
+
                   const SizedBox(height: 16),
 
-                  // Option 2: Tutee Card
                   _buildRoleCard(
                     roleKey: 'tutee',
                     title: 'Become a Tutee',
-                    description: 'Learn new skills, connect with expert mentors, and achieve your learning goals.',
+                    description:
+                        'Learn new skills, connect with mentors, '
+                        'and achieve your learning goals.',
                     icon: Icons.menu_book_rounded,
                     accentColor: Colors.teal,
                   ),
+
+                  if (_selectedRole == 'tutee') ...[
+                    const SizedBox(height: 24),
+
+                    const Text(
+                      'Tutee Classification',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    Text(
+                      'Select the classification that applies to you.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Student'),
+                          selected: _selectedUserType == 'student',
+                          onSelected: _isLoading
+                              ? null
+                              : (selected) {
+                                  setState(() {
+                                    _selectedUserType = selected
+                                        ? 'student'
+                                        : null;
+                                  });
+                                },
+                        ),
+                        ChoiceChip(
+                          label: const Text('Non-student'),
+                          selected: _selectedUserType == 'non_student',
+                          onSelected: _isLoading
+                              ? null
+                              : (selected) {
+                                  setState(() {
+                                    _selectedUserType = selected
+                                        ? 'non_student'
+                                        : null;
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
+                  ],
+
                   const SizedBox(height: 32),
 
-                  // Continue Button
                   SizedBox(
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _selectedRole != null
+                      onPressed:
+                          _selectedRole != null &&
+                              !_isLoading &&
+                              !_profileCreated
                           ? _confirmSelection
                           : null,
                       style: ElevatedButton.styleFrom(
@@ -113,13 +267,22 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                         ),
                         elevation: 2,
                       ),
-                      child: const Text(
-                        'Continue',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              _profileCreated ? 'Profile Created' : 'Continue',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -141,25 +304,33 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     final isSelected = _selectedRole == roleKey;
 
     return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedRole = roleKey;
-        });
-      },
+      onTap: _isLoading || _profileCreated
+          ? null
+          : () {
+              setState(() {
+                _selectedRole = roleKey;
+
+                if (roleKey == 'tutor') {
+                  _selectedUserType = null;
+                }
+              });
+            },
       borderRadius: BorderRadius.circular(16),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isSelected ? accentColor.withOpacity(0.08) : Colors.white,
+          color: isSelected
+              ? accentColor.withValues(alpha: 0.08)
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected ? accentColor : Colors.grey.shade300,
-            width: isSelected ? 2.5 : 1.0,
+            width: isSelected ? 2.5 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -170,7 +341,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isSelected ? accentColor : accentColor.withOpacity(0.1),
+                color: isSelected
+                    ? accentColor
+                    : accentColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -180,6 +353,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               ),
             ),
             const SizedBox(width: 16),
+
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,16 +378,14 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 ],
               ),
             ),
+
             const SizedBox(width: 8),
-            Radio<String>(
-              value: roleKey,
-              groupValue: _selectedRole,
-              activeColor: accentColor,
-              onChanged: (value) {
-                setState(() {
-                  _selectedRole = value;
-                });
-              },
+
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: isSelected ? accentColor : Colors.grey,
             ),
           ],
         ),

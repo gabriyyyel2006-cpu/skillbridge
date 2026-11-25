@@ -1,0 +1,40 @@
+
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'screens/registration_screen.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://sbfrxuyoexbcidkutzpv.supabase.co',
+    publishableKey: 'sb_publishable_mlpX2Fa54NarPBAMg5u-1w_rTqtlOey',
+  );
+
+  runApp(const SkillBridgeApp());
+}
+
+class SkillBridgeApp extends StatelessWidget {
+  const SkillBridgeApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'SkillBridge',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.indigo,
+        useMaterial3: true,
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          filled: true,
+          fillColor: Colors.grey.shade50,
+        ),
+      ),
+      home: const RegistrationScreen(),
+    );
+  }
+}

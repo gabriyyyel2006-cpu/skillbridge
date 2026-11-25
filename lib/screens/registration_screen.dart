@@ -1,5 +1,7 @@
+
 import 'package:flutter/material.dart';
-import 'role_selection_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'login_screen.dart';
 
 class RegistrationScreen extends StatefulWidget {
@@ -30,29 +32,82 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     super.dispose();
   }
 
-  void _handleRegistration() {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
+  Future<void> _handleRegistration() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-      // Simulate network request
-      Future.delayed(const Duration(seconds: 1, milliseconds: 500), () {
-        if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await Supabase.instance.client.auth.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        data: {
+          'full_name': _nameController.text.trim(),
+        },
+        emailRedirectTo: 'http://localhost:8080',
+      );
+
+      if (!mounted) return;
+
+      if (response.user != null) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: const Text('Verify Your Email'),
+              content: Text(
+                'A confirmation email has been sent to '
+                '${_emailController.text.trim()}. '
+                'Please verify your email address before logging in.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (_) => const LoginScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                  child: const Text('Go to Login'),
+                ),
+              ],
+            );
+          },
+        );
+      }
+    } on AuthException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Registration failed: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });
-
-        // Navigate to Role Selection Screen
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => RoleSelectionScreen(
-              userName: _nameController.text.trim(),
-            ),
-          ),
-        );
-      });
+      }
     }
   }
 
@@ -63,7 +118,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 16.0,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 450),
               child: Form(
@@ -98,7 +156,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Full Name Field
+                    // Full Name
                     TextFormField(
                       controller: _nameController,
                       keyboardType: TextInputType.name,
@@ -116,7 +174,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Email Field
+                    // Email
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -128,16 +186,21 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         if (value == null || value.trim().isEmpty) {
                           return 'Please enter your email';
                         }
-                        final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-                        if (!emailRegex.hasMatch(value)) {
+
+                        final emailRegex = RegExp(
+                          r'^[\w.+-]+@([\w-]+\.)+[A-Za-z]{2,}$',
+                        );
+
+                        if (!emailRegex.hasMatch(value.trim())) {
                           return 'Please enter a valid email address';
                         }
+
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
 
-                    // Password Field
+                    // Password
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
@@ -146,7 +209,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                           ),
                           onPressed: () {
                             setState(() {
@@ -159,15 +224,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         if (value == null || value.isEmpty) {
                           return 'Please enter a password';
                         }
+
                         if (value.length < 6) {
                           return 'Password must be at least 6 characters long';
                         }
+
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
 
-                    // Confirm Password Field
+                    // Confirm Password
                     TextFormField(
                       controller: _confirmPasswordController,
                       obscureText: _obscureConfirmPassword,
@@ -176,11 +243,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         prefixIcon: const Icon(Icons.lock_reset_outlined),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                            _obscureConfirmPassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                           ),
                           onPressed: () {
                             setState(() {
-                              _obscureConfirmPassword = !_obscureConfirmPassword;
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword;
                             });
                           },
                         ),
@@ -189,9 +259,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         if (value == null || value.isEmpty) {
                           return 'Please confirm your password';
                         }
+
                         if (value != _passwordController.text) {
                           return 'Passwords do not match';
                         }
+
                         return null;
                       },
                     ),
@@ -201,7 +273,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     SizedBox(
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleRegistration,
+                        onPressed:
+                            _isLoading ? null : _handleRegistration,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.indigo,
                           foregroundColor: Colors.white,
@@ -212,11 +285,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         ),
                         child: _isLoading
                             ? const SizedBox(
-                                width: 24,
-                                height: 24,
+                                height: 22,
+                                width: 22,
                                 child: CircularProgressIndicator(
-                                  color: Colors.white,
                                   strokeWidth: 2,
+                                  color: Colors.white,
                                 ),
                               )
                             : const Text(
@@ -228,22 +301,25 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                               ),
                       ),
                     ),
+
                     const SizedBox(height: 16),
 
-                    // Redirect to Log In Screen
+                    // Login Navigation
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           'Already have an account? ',
-                          style: TextStyle(color: Colors.grey.shade600),
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                         GestureDetector(
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const LoginScreen(),
+                                builder: (_) => const LoginScreen(),
                               ),
                             );
                           },
