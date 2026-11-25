@@ -56,6 +56,24 @@ class _LoginScreenState extends State<LoginScreen> {
         throw Exception('Login failed. Please try again.');
       }
 
+      // CHECK EMAIL VERIFICATION BEFORE DASHBOARD ACCESS
+      if (user.emailConfirmedAt == null) {
+        await supabase.auth.signOut();
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Your email address is not verified. Please check your inbox and verify your email before logging in.',
+            ),
+            duration: Duration(seconds: 5),
+          ),
+        );
+
+        return;
+      }
+
       // CHECK ADMIN MEMBERSHIP FIRST
       final adminRecord = await supabase
           .from('admin_users')
@@ -243,9 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     size: 64,
                     color: Colors.indigo,
                   ),
-
                   const SizedBox(height: 12),
-
                   const Text(
                     'Welcome Back!',
                     textAlign: TextAlign.center,
@@ -255,9 +271,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Colors.indigo,
                     ),
                   ),
-
                   const SizedBox(height: 8),
-
                   Text(
                     'Log in to continue your SkillBridge journey',
                     textAlign: TextAlign.center,
@@ -266,7 +280,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Colors.grey.shade600,
                     ),
                   ),
-
                   const SizedBox(height: 32),
 
                   // EMAIL ADDRESS
@@ -285,7 +298,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       fillColor: Colors.grey.shade50,
                     ),
                   ),
-
                   const SizedBox(height: 16),
 
                   // PASSWORD
@@ -312,12 +324,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _isLoading
                           ? null
                           : _handleForgotPassword,
-                      child: const Text(
-                        'Forgot Password?',
-                      ),
+                      child: const Text('Forgot Password?'),
                     ),
                   ),
-
                   const SizedBox(height: 24),
 
                   // LOGIN BUTTON
@@ -353,7 +362,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
 
                   // SIGN UP LINK
